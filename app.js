@@ -10,8 +10,36 @@ document.addEventListener('DOMContentLoaded', function () {
     initForms();
     initAdmin();
     initAnimations();
-    initStudentSession();
+    initSessionAndRBAC();
 });
+
+// Simple RBAC constants / helpers
+const CURRENT_USER_KEY = 'currentUser';
+const ROLE_STUDENT = 'student';
+const ROLE_LEADER = 'leader';
+const ROLE_ADMIN = 'admin';
+
+function getCurrentUser() {
+    try {
+        return JSON.parse(localStorage.getItem(CURRENT_USER_KEY)) || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function hasRole(...roles) {
+    const user = getCurrentUser();
+    if (!user || !user.role) return false;
+    return roles.includes(user.role);
+}
+
+function requireRole(allowedRoles, redirectTo) {
+    if (!hasRole(...allowedRoles)) {
+        window.location.href = redirectTo;
+        return false;
+    }
+    return true;
+}
 
 /**
  * 1. Navigation & Scrolling Logic
@@ -342,17 +370,23 @@ function initForms() {
         });
     }
 
-    // Student Login
+    // Student / Club Leader Login
     const studentLoginForm = document.getElementById('student-login-form');
     if (studentLoginForm) {
         studentLoginForm.addEventListener('submit', function (e) {
             e.preventDefault();
             const name = document.getElementById('login-student-name').value;
             const id = document.getElementById('login-student-id').value;
+            const role = document.getElementById('login-role')?.value || ROLE_STUDENT;
 
             if (name && id) {
-                const student = { name, id };
-                localStorage.setItem('studentUser', JSON.stringify(student));
+                const user = { name, id, role };
+                // Unified RBAC user
+                localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+                // Backwards compatibility with existing student-specific features
+                if (role === ROLE_STUDENT || role === ROLE_LEADER) {
+                    localStorage.setItem('studentUser', JSON.stringify(user));
+                }
                 updateUIForStudent();
                 document.getElementById('login-message').textContent = 'Login successful!';
                 setTimeout(() => {
@@ -489,6 +523,8 @@ function initCalendar() {
         }
     }
 
+    const canManageEvents = hasRole(ROLE_LEADER, ROLE_ADMIN);
+
     function showEventDetails(event) {
         if (!eventDetailsContainer) return;
         selectedEvent = event;
@@ -497,7 +533,7 @@ function initCalendar() {
             <div class="event-details">
                 <div class="event-header">
                     <span class="event-club-badge ${event.club}">${getClubName(event.club)}</span>
-                    <button id="edit-event" class="action-button"><i class="fas fa-edit"></i> Edit</button>
+                    ${canManageEvents ? '<button id="edit-event" class="action-button"><i class="fas fa-edit"></i> Edit</button>' : ''}
                 </div>
                 <h2 class="event-title">${event.name}</h2>
                 <div class="event-date-time">
@@ -514,13 +550,22 @@ function initCalendar() {
         `;
 
         // Bind dynamic buttons
-        document.getElementById('edit-event').addEventListener('click', () => openEventModal(event));
+        const editBtn = document.getElementById('edit-event');
+        if (editBtn && canManageEvents) {
+            editBtn.addEventListener('click', () => openEventModal(event));
+        }
         document.getElementById('register-for-event').addEventListener('click', () => alert(`Registered for ${event.name}`));
         document.getElementById('share-event').addEventListener('click', () => alert(`Share link for ${event.name} copied to clipboard!`));
     }
 
     function openEventModal(event = null, date = null) {
         if (!eventModal) return;
+
+        // Only admins and club leaders can create / edit events
+        if (!hasRole(ROLE_LEADER, ROLE_ADMIN)) {
+            alert('You do not have permission to manage events. Please contact your club leader or admin.');
+            return;
+        }
 
         if (event) {
             document.getElementById('modal-title').textContent = 'Edit Event';
@@ -698,6 +743,9 @@ function initAdmin() {
 
                 // Session Mock
                 localStorage.setItem('adminLoggedIn', 'true'); // Using local storage to persist across page loads in this demo
+                // Unified RBAC user
+                const user = { id: 'admin', name: username, role: ROLE_ADMIN };
+                localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
 
                 // UI Feedback
                 const loginButton = document.querySelector('.login-button');
@@ -716,15 +764,15 @@ function initAdmin() {
     // 6b. Admin Dashboard Logic
     const adminDashboard = document.getElementById('admin-dashboard');
     if (adminDashboard) {
-        const isLoggedIn = localStorage.getItem('adminLoggedIn') === 'true';
-        if (!isLoggedIn) {
-            window.location.href = 'admin-login.html';
-        } else {
+        // Route protection: only admins can view dashboard
+        const isAllowed = requireRole([ROLE_ADMIN], 'admin-login.html');
+        if (isAllowed) {
             loadAdminDashboard();
             const logoutButton = document.getElementById('admin-logout');
             if (logoutButton) {
                 logoutButton.addEventListener('click', function () {
                     localStorage.removeItem('adminLoggedIn');
+                    localStorage.removeItem(CURRENT_USER_KEY);
                     window.location.href = 'admin-login.html';
                 });
             }
@@ -899,7 +947,7 @@ function initAnimations() {
     }
 }
 
-function initStudentSession() {
+function initSessionAndRBAC() {
     updateUIForStudent();
 
     const logoutBtn = document.getElementById('student-logout-btn');
@@ -907,6 +955,7 @@ function initStudentSession() {
         logoutBtn.addEventListener('click', function (e) {
             e.preventDefault();
             localStorage.removeItem('studentUser');
+            localStorage.removeItem(CURRENT_USER_KEY);
             updateUIForStudent();
             window.location.href = 'index.html';
         });
@@ -928,6 +977,16 @@ function initStudentSession() {
 
         fillForm('club');
         fillForm('event');
+    }
+
+    // Simple route protection for My Hub page
+    const path = window.location.pathname.split('/').pop();
+    if (path === 'my-hub.html') {
+        // Only students & club leaders can access My Hub
+        if (!hasRole(ROLE_STUDENT, ROLE_LEADER)) {
+            window.location.href = 'registration.html#student-login';
+            return;
+        }
     }
 
     updateEnrollmentStatus();
