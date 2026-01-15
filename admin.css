@@ -2,7 +2,9 @@
 .admin-container {
     display: flex;
     min-height: calc(100vh - 80px);
-    margin-top: 80px;
+    /* previously margin-top: 80px created a large empty gap under the fixed nav */
+    margin-top: 40px;
+    padding-top: 1rem;
     position: relative;
 }
 
