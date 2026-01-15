@@ -749,14 +749,33 @@ function initAdmin() {
 
                 // UI Feedback
                 const loginButton = document.querySelector('.login-button');
+                const loginMessage = document.getElementById('admin-login-message');
                 if (loginButton) {
                     loginButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Logging in...</span>';
                     loginButton.disabled = true;
                 }
-                setTimeout(() => { window.location.href = 'admin-dashboard.html'; }, 1000);
+                if (loginMessage) {
+                    loginMessage.textContent = 'Login successful! Redirecting...';
+                    loginMessage.style.color = 'var(--success-color)';
+                }
+                
+                // Refresh page to show dashboard (or redirect if on different page)
+                setTimeout(() => { 
+                    if (window.location.pathname.includes('admin-login.html')) {
+                        window.location.reload();
+                    } else {
+                        window.location.href = 'admin-login.html';
+                    }
+                }, 1000);
 
             } else {
-                alert('Invalid credentials. Please try again.');
+                const loginMessage = document.getElementById('admin-login-message');
+                if (loginMessage) {
+                    loginMessage.textContent = 'Invalid credentials. Please try again.';
+                    loginMessage.style.color = 'var(--danger-color)';
+                } else {
+                    alert('Invalid credentials. Please try again.');
+                }
             }
         });
     }
@@ -990,10 +1009,21 @@ function initSessionAndRBAC() {
     }
 
     if (path === 'admin-login.html') {
-        const hasLoginForm = !!document.getElementById('admin-login-form');
-        // If this page is functioning as a dashboard (no login form),
-        // restrict it strictly to admin role.
-        if (!hasLoginForm && !hasRole(ROLE_ADMIN)) {
+        const loginSection = document.getElementById('admin-login-section');
+        const dashboardSection = document.getElementById('admin-dashboard-section');
+        const isAdmin = hasRole(ROLE_ADMIN);
+        
+        // Show/hide login form vs dashboard based on admin status
+        if (loginSection && dashboardSection) {
+            if (isAdmin) {
+                loginSection.style.display = 'none';
+                dashboardSection.style.display = 'block';
+            } else {
+                loginSection.style.display = 'block';
+                dashboardSection.style.display = 'none';
+            }
+        } else if (!isAdmin && dashboardSection) {
+            // If dashboard exists but user is not admin, redirect
             window.location.href = 'registration.html#student-login';
             return;
         }
