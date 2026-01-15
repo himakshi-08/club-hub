@@ -979,11 +979,21 @@ function initSessionAndRBAC() {
         fillForm('event');
     }
 
-    // Simple route protection for My Hub page
+    // Simple route protection for My Hub / Admin pages
     const path = window.location.pathname.split('/').pop();
     if (path === 'my-hub.html') {
         // Only students & club leaders can access My Hub
         if (!hasRole(ROLE_STUDENT, ROLE_LEADER)) {
+            window.location.href = 'registration.html#student-login';
+            return;
+        }
+    }
+
+    if (path === 'admin-login.html') {
+        const hasLoginForm = !!document.getElementById('admin-login-form');
+        // If this page is functioning as a dashboard (no login form),
+        // restrict it strictly to admin role.
+        if (!hasLoginForm && !hasRole(ROLE_ADMIN)) {
             window.location.href = 'registration.html#student-login';
             return;
         }
@@ -994,9 +1004,12 @@ function initSessionAndRBAC() {
 
 function updateUIForStudent() {
     const student = JSON.parse(localStorage.getItem('studentUser'));
+    const currentUser = getCurrentUser();
     const navMyHub = document.getElementById('nav-my-hub');
     const navLogin = document.getElementById('nav-login');
     const navLogout = document.getElementById('nav-logout');
+    const navAdminLink = document.querySelector('.nav-links a[href="admin-login.html"]');
+    const navAdminItem = navAdminLink ? navAdminLink.parentElement : null;
 
     if (student) {
         if (navMyHub) navMyHub.classList.remove('hidden');
@@ -1006,6 +1019,15 @@ function updateUIForStudent() {
         if (navMyHub) navMyHub.classList.add('hidden');
         if (navLogin) navLogin.classList.remove('hidden');
         if (navLogout) navLogout.classList.add('hidden');
+    }
+
+    // Admin nav visibility based on role
+    if (navAdminItem) {
+        if (currentUser && currentUser.role === ROLE_ADMIN) {
+            navAdminItem.classList.remove('hidden');
+        } else {
+            navAdminItem.classList.add('hidden');
+        }
     }
 }
 
